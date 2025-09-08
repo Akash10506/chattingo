@@ -1,109 +1,79 @@
 pipeline {
   agent any
-  options {
-    timestamps()
-    ansiColor('xterm')
-  }
+  options { timestamps() }   // <-- removed ansiColor
+
   environment {
-    // Image tags kept local only
+    // Make sure Jenkins can find snap-installed trivy
+    PATH = "/snap/bin:/usr/local/bin:/usr/bin:/bin"
+    TRIVY_SEVERITY  = 'CRITICAL,HIGH'
+    TRIVY_EXIT_CODE = '0'  // set to '1' to fail build on vulns
+
     FRONTEND_TAG = "chattingo-frontend:jenkins-${BUILD_NUMBER}"
     BACKEND_TAG  = "chattingo-backend:jenkins-${BUILD_NUMBER}"
-
-    // Trivy behavior
-    TRIVY_SEVERITY  = 'CRITICAL,HIGH'
-    TRIVY_EXIT_CODE = '0'   // set to '1' to fail build on vulns
   }
 
   stages {
-    stage('Git Clone') { // Clone repository from GitHub (2 Marks)
+    stage('Git Clone') {
       steps {
-        // If this is a Multibranch Pipeline, Jenkins checks out SCM automatically.
-        // For a simple Pipeline job, uncomment and set your repo:
-        // git url: 'https://github.com/<you>/<repo>.git', branch: 'main'
+        // SCM checkout happens automatically for "Pipeline script from SCM"
         sh 'git rev-parse --short HEAD || true'
       }
     }
 
-    stage('Image Build') { // Build Docker images for frontend & backend (2 Marks)
+    stage('Image Build') {
       parallel {
         stage('Build Backend') {
           steps {
-            sh '''
-              docker build -t ${BACKEND_TAG} -f backend/Dockerfile backend
-            '''
+            sh 'docker build -t ${BACKEND_TAG} -f backend/Dockerfile backend'
           }
         }
         stage('Build Frontend') {
           steps {
-            sh '''
-              docker build -t ${FRONTEND_TAG} -f frontend/Dockerfile frontend
-            '''
+            sh 'docker build -t ${FRONTEND_TAG} -f frontend/Dockerfile frontend'
           }
         }
       }
     }
 
-    stage('Filesystem Scan') { // Security scan of source code (2 Marks)
+    stage('Filesystem Scan') {
       steps {
-        // Requires trivy installed on the Jenkins node
+        // use trivy from PATH (snap puts it in /snap/bin)
         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-          sh '''
-            trivy fs --no-progress --exit-code ${TRIVY_EXIT_CODE} \
-              --severity ${TRIVY_SEVERITY} .
-          '''
+          sh 'trivy fs --no-progress --exit-code ${TRIVY_EXIT_CODE} --severity ${TRIVY_SEVERITY} .'
         }
       }
     }
 
-    stage('Image Scan') { // Vulnerability scan of Docker images (2 Marks)
+    stage('Image Scan') {
       parallel {
         stage('Scan Backend Image') {
           steps {
             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-              sh '''
-                trivy image --no-progress --exit-code ${TRIVY_EXIT_CODE} \
-                  --severity ${TRIVY_SEVERITY} ${BACKEND_TAG}
-              '''
+              sh 'trivy image --no-progress --exit-code ${TRIVY_EXIT_CODE} --severity ${TRIVY_SEVERITY} ${BACKEND_TAG}'
             }
           }
         }
         stage('Scan Frontend Image') {
           steps {
             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-              sh '''
-                trivy image --no-progress --exit-code ${TRIVY_EXIT_CODE} \
-                  --severity ${TRIVY_SEVERITY} ${FRONTEND_TAG}
-              '''
+              sh 'trivy image --no-progress --exit-code ${TRIVY_EXIT_CODE} --severity ${TRIVY_SEVERITY} ${FRONTEND_TAG}'
             }
           }
         }
       }
     }
 
-    stage('Push to Registry') { // Push images to Docker Hub/Registry (2 Marks)
-      steps {
-        echo 'Local-only build selected — skipping image push.'
-      }
-    }
+    stage('Push to Registry') { steps { echo 'Local-only build — skipping push.' } }
+    stage('Update Compose')   { steps { echo 'Compose builds locally — skipping tag update.' } }
 
-    stage('Update Compose') { // Update docker-compose with new image tags (2 Marks)
+    stage('Deploy') {
       steps {
-        echo 'Compose uses local build contexts — no tag update needed.'
-      }
-    }
-
-    stage('Deploy') { // Deploy to Hostinger VPS (5 Marks)
-      steps {
-        // Rebuild from local folders and restart services on THIS server
         sh '''
-          # If your compose uses `build:` entries, this rebuilds from source:
           docker compose down
           docker compose up -d --build
           docker compose ps
-
-          echo 'Smoke checks…'
-          curl -sS --max-time 10 http://localhost:8080/actuator/health || true
-          curl -sSI --max-time 10 http://localhost:3000 || true
+          echo "Backend health:" && curl -sS --max-time 10 http://localhost:8081/actuator/health || true
+          echo "Frontend head:"  && curl -sSI --max-time 10 http://localhost:3000             || true
         '''
       }
     }
@@ -111,7 +81,6 @@ pipeline {
 
   post {
     always {
-      echo 'Pruning dangling images…'
       sh 'docker image prune -f || true'
     }
   }
