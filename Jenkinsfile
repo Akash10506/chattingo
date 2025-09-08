@@ -1,33 +1,28 @@
 pipeline {
   agent any
 
-  options {
-    timestamps()
-  }
+  options { timestamps() }
 
   environment {
-    // --- Dockerized Trivy to avoid snap restrictions ---
-    TRIVY_DOCKER = 'docker run --rm -u $(id -u):$(id -g) ' +
-                   '-v $PWD:/src ' +
-                   '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                   '-v $HOME/.cache/trivy:/root/.cache/ ' +
-                   'aquasec/trivy:0.54.1'
-    TRIVY_SEVERITY  = 'CRITICAL,HIGH'
-    TRIVY_EXIT_CODE = '0'   // set to '1' to fail build on vulns
+    // --- Trivy via Docker (avoids snap/permissions issues) ---
+    TRIVY_IMAGE    = 'aquasec/trivy:0.54.1'
+    TRIVY_SEVERITY = 'CRITICAL,HIGH'
+    // set to '1' to fail build on HIGH/CRITICAL vulns
+    TRIVY_EXIT_CODE = '0'
 
-    // --- Local image tags (no registry) ---
+    // --- Local image tags (no external registry) ---
     FRONTEND_TAG = "chattingo-frontend:jenkins-${BUILD_NUMBER}"
     BACKEND_TAG  = "chattingo-backend:jenkins-${BUILD_NUMBER}"
 
-    // --- Deploy using the LIVE compose file path on the server ---
-    DEPLOY_COMPOSE = '/root/chattingo/docker-compose.yml'
+    // --- Deploy using the LIVE compose file Jenkins can read ---
+    DEPLOY_COMPOSE = '/opt/chattingo/docker-compose.yml'
   }
 
   stages {
     stage('Git Clone') { 
       // Clone repository from GitHub (2 Marks)
       steps {
-        // SCM checkout is already done by Jenkins for "Pipeline from SCM".
+        // (SCM checkout is done automatically by Jenkins for "Pipeline from SCM")
         sh 'git rev-parse --short HEAD || true'
       }
     }
@@ -53,7 +48,12 @@ pipeline {
       steps {
         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
           sh '''
-            ${TRIVY_DOCKER} fs --no-progress --exit-code ${TRIVY_EXIT_CODE} \
+            UID=$(id -u); GID=$(id -g)
+            docker run --rm -u "$UID:$GID" \
+              -v "$PWD":/src \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$HOME/.cache/trivy":/root/.cache \
+              ${TRIVY_IMAGE} fs --no-progress --exit-code ${TRIVY_EXIT_CODE} \
               --severity ${TRIVY_SEVERITY} /src
           '''
         }
@@ -67,7 +67,11 @@ pipeline {
           steps {
             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
               sh '''
-                ${TRIVY_DOCKER} image --no-progress --exit-code ${TRIVY_EXIT_CODE} \
+                UID=$(id -u); GID=$(id -g)
+                docker run --rm -u "$UID:$GID" \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v "$HOME/.cache/trivy":/root/.cache \
+                  ${TRIVY_IMAGE} image --no-progress --exit-code ${TRIVY_EXIT_CODE} \
                   --severity ${TRIVY_SEVERITY} ${BACKEND_TAG}
               '''
             }
@@ -77,7 +81,11 @@ pipeline {
           steps {
             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
               sh '''
-                ${TRIVY_DOCKER} image --no-progress --exit-code ${TRIVY_EXIT_CODE} \
+                UID=$(id -u); GID=$(id -g)
+                docker run --rm -u "$UID:$GID" \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v "$HOME/.cache/trivy":/root/.cache \
+                  ${TRIVY_IMAGE} image --no-progress --exit-code ${TRIVY_EXIT_CODE} \
                   --severity ${TRIVY_SEVERITY} ${FRONTEND_TAG}
               '''
             }
@@ -104,7 +112,7 @@ pipeline {
       // Deploy to Hostinger VPS (5 Marks)
       steps {
         sh '''
-          # Use the live compose file so we manage the same containers (avoid name conflicts)
+          # Deploy against the live compose under /opt/chattingo
           docker compose -f ${DEPLOY_COMPOSE} down
           docker compose -f ${DEPLOY_COMPOSE} up -d --build --remove-orphans
           docker compose -f ${DEPLOY_COMPOSE} ps
