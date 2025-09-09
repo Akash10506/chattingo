@@ -97,25 +97,28 @@ pipeline {
         }
 
         stage('Deploy') {
-            steps {
-                sh '''
-                  docker compose down || true
-                  docker compose up -d --build --remove-orphans
+    steps {
+        script {
+            sh 'docker rm -f chattingo-mysql || true'
+            sh 'docker compose down --remove-orphans'
+            sh 'docker compose up -d --build'
 
-                  echo "Checking backend health..."
-                  for i in {1..30}; do
-                    out=$(curl -sfS ${HEALTH_URL} || true)
-                    echo Attempt $i: $out
-                    echo "$out" | grep -q '"status":"UP"' && { echo "Backend is UP"; exit 0; }
-                    sleep 2
-                  done
-                  echo "Backend failed to become healthy"
-                  docker logs chattingo-backend | tail -n 100
-                  exit 1
-                '''
+            echo "Checking backend health..."
+            for (i in 1..30) {
+              out = sh(script: "curl -sfS ${HEALTH_URL} || true", returnStdout: true).trim()
+              echo "Attempt $i: $out"
+              if (out.contains('"status":"UP"')) {
+                echo "Backend is UP"
+                return
+              }
+              sleep 2
             }
+            echo "Backend failed to become healthy"
+            sh "docker logs chattingo-backend | tail -n 100"
+            error "Backend health check failed"
         }
     }
+}
 
     post {
         always {
