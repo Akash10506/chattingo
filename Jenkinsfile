@@ -108,7 +108,7 @@ pipeline {
                     sh 'docker compose up -d --build'
 
                     echo "Checking backend health..."
-                    for (i in 1..30) {
+                    for (int i = 1; i <= 30; i++) {
                       out = sh(script: "curl -sfS ${HEALTH_URL} || true", returnStdout: true).trim()
                       echo "Attempt $i: $out"
                       if (out.contains('"status":"UP"')) {
