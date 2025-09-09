@@ -109,7 +109,7 @@ pipeline {
               echo "Attempt $i: $out"
               if (out.contains('"status":"UP"')) {
                 echo "Backend is UP"
-                return
+                return // Correct usage of return inside a script block
               }
               sleep 2
             }
