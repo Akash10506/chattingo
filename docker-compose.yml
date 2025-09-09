@@ -39,7 +39,7 @@ services:
       JWT_SECRET: 0ce2ee60a5038f1b2ed4526c49025ce2e4a4e0c2ddd8699e96a25ab7fe866261
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost
     ports:
-      - '8081:8080'
+      - '8080:8080'
     networks:
       - chattingo-network
     healthcheck:
@@ -69,4 +69,5 @@ volumes:
 networks:
   chattingo-network:
     driver: bridge
+
 
