@@ -99,26 +99,21 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Forcefully remove any existing containers to prevent conflicts
-                    sh 'docker rm -f chattingo-mysql || true'
-                    sh 'docker rm -f chattingo-backend || true'
-                    sh 'docker rm -f chattingo-frontend || true'
+                    // ... your existing docker rm and docker compose up commands ...
 
-                    sh 'docker compose down --remove-orphans'
-                    sh 'docker compose up -d --build'
+                    echo "Waiting for backend to initialize..."
+                    sleep 10 // <-- ADD THIS LINE to give the app time to start
 
                     echo "Checking backend health..."
                     for (int i = 1; i <= 30; i++) {
-                      out = sh(script: "curl -sfS ${HEALTH_URL} || true", returnStdout: true).trim()
-                      echo "Attempt $i: $out"
-                      if (out.contains('"status":"UP"')) {
-                        echo "Backend is UP"
-                        return
-                      }
-                      sleep 2
+                        echo "Attempt ${i}:"
+                        def out = sh(script: "curl -sfS http://localhost:8081/actuator/health || true", returnStdout: true).trim()
+                        if (out.contains('"status":"UP"')) {
+                            echo "Backend is healthy!"
+                            return // Exit the script block successfully
+                        }
+                        sleep 2
                     }
-                    echo "Backend failed to become healthy"
-                    sh "docker logs chattingo-backend | tail -n 100"
                     error "Backend health check failed"
                 }
             }
