@@ -99,7 +99,11 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
+                    // Forcefully remove any existing containers to prevent conflicts
                     sh 'docker rm -f chattingo-mysql || true'
+                    sh 'docker rm -f chattingo-backend || true'
+                    sh 'docker rm -f chattingo-frontend || true'
+
                     sh 'docker compose down --remove-orphans'
                     sh 'docker compose up -d --build'
 
@@ -127,4 +131,3 @@ pipeline {
         }
     }
 }
-
