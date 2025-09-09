@@ -2,14 +2,14 @@ pipeline {
     agent any
 
     environment {
-        TRIVY_IMAGE     = 'aquasec/trivy:0.54.1'
-        TRIVY_SEVERITY  = 'CRITICAL,HIGH'
+        TRIVY_IMAGE = 'aquasec/trivy:0.54.1'
+        TRIVY_SEVERITY = 'CRITICAL,HIGH'
         TRIVY_EXIT_CODE = '0' // set to '1' to fail build on HIGH/CRITICAL
 
         FRONTEND_TAG = "chattingo-frontend:jenkins-${BUILD_NUMBER}"
-        BACKEND_TAG  = "chattingo-backend:jenkins-${BUILD_NUMBER}"
+        BACKEND_TAG = "chattingo-backend:jenkins-${BUILD_NUMBER}"
 
-        HEALTH_URL  = 'http://localhost:8081/actuator/health'
+        HEALTH_URL = 'http://localhost:8081/actuator/health'
     }
 
     stages {
@@ -97,34 +97,34 @@ pipeline {
         }
 
         stage('Deploy') {
-    steps {
-        script {
-            sh 'docker rm -f chattingo-mysql || true'
-            sh 'docker compose down --remove-orphans'
-            sh 'docker compose up -d --build'
+            steps {
+                script {
+                    sh 'docker rm -f chattingo-mysql || true'
+                    sh 'docker compose down --remove-orphans'
+                    sh 'docker compose up -d --build'
 
-            echo "Checking backend health..."
-            for (i in 1..30) {
-              out = sh(script: "curl -sfS ${HEALTH_URL} || true", returnStdout: true).trim()
-              echo "Attempt $i: $out"
-              if (out.contains('"status":"UP"')) {
-                echo "Backend is UP"
-                return // Correct usage of return inside a script block
-              }
-              sleep 2
+                    echo "Checking backend health..."
+                    for (i in 1..30) {
+                      out = sh(script: "curl -sfS ${HEALTH_URL} || true", returnStdout: true).trim()
+                      echo "Attempt $i: $out"
+                      if (out.contains('"status":"UP"')) {
+                        echo "Backend is UP"
+                        return
+                      }
+                      sleep 2
+                    }
+                    echo "Backend failed to become healthy"
+                    sh "docker logs chattingo-backend | tail -n 100"
+                    error "Backend health check failed"
+                }
             }
-            echo "Backend failed to become healthy"
-            sh "docker logs chattingo-backend | tail -n 100"
-            error "Backend health check failed"
         }
     }
-}
 
     post {
         always {
             sh 'docker image prune -f || true'
         }
     }
-}
 }
 
