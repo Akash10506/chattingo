@@ -37,8 +37,15 @@ public class AppConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http.sessionManagement(management -> management.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize.requestMatchers("/api/**").authenticated()
-                        .anyRequest().permitAll())
+                
+                // --- THIS IS THE CORRECTED SECTION ---
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/actuator/**", "/ws/**", "/api/auth/**").permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().authenticated()
+                )
+                // ------------------------------------
+
                 .addFilterBefore(jwtValidator, BasicAuthenticationFilter.class)
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(new CorsConfigurationSource() {
@@ -47,12 +54,9 @@ public class AppConfig {
                     public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
                         CorsConfiguration cfg = new CorsConfiguration();
 
-                        // Parse allowed origins from environment variable
                         String[] origins = allowedOrigins.split(",");
                         cfg.setAllowedOrigins(Arrays.asList(origins));
-                        cfg.setAllowedOriginPatterns(Arrays.asList("*"));
 
-                        // Parse allowed methods from environment variable
                         String[] methods = allowedMethods.split(",");
                         cfg.setAllowedMethods(Arrays.asList(methods));
                         
