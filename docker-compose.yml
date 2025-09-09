@@ -37,7 +37,7 @@ services:
       SPRING_DATASOURCE_USERNAME: chatuser
       SPRING_DATASOURCE_PASSWORD: chatpassword
       JWT_SECRET: 0ce2ee60a5038f1b2ed4526c49025ce2e4a4e0c2ddd8699e96a25ab7fe866261
-      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://147.79.70.216:3000  # <-- CORRECTED
     ports:
       - '8081:8080'
     networks:
@@ -61,7 +61,7 @@ services:
     networks:
       - chattingo-network
     environment:
-      REACT_APP_API_BASE_URL: http://localhost:8081
+      REACT_APP_API_BASE_URL: http://147.79.70.216:8081 # <-- CORRECTED
 
 volumes:
   mysql_data:
@@ -69,5 +69,4 @@ volumes:
 networks:
   chattingo-network:
     driver: bridge
-
 
