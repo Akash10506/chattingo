@@ -68,8 +68,8 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Cleanup and deploy the application
-                    sh 'docker compose down --remove-orphans || true'
+                    // Use a more forceful and reliable cleanup command
+                    sh 'docker rm -f chattingo-mysql chattingo-backend chattingo-frontend || true'
                     sh "docker compose up -d"
                     
                     echo "Waiting for backend to initialize..."
