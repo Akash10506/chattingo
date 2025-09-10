@@ -107,7 +107,7 @@ pipeline {
                     echo "Checking backend health..."
                     for (int i = 1; i <= 30; i++) {
                         echo "Attempt ${i}:"
-                        def out = sh(script: "curl -sfS http://localhost:8081/actuator/health || true", returnStdout: true).trim()
+                        def out = sh(script: "curl -sfS http://localhost:8080/actuator/health || true", returnStdout: true).trim()
                         if (out.contains('"status":"UP"')) {
                             echo "Backend is healthy!"
                             return // Exit the script block successfully
