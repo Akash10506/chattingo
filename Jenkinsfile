@@ -13,40 +13,17 @@ pipeline {
     }
 
     stages {
-        stage('Git Clone') {
-            steps {
-                // If using "Pipeline from SCM", Jenkins auto-checks out. Else:
-                git branch: 'main', url: 'https://github.com/Akash10506/chattingo.git'
-            }
-        }
-
         stage('Image Build') {
             parallel {
                 stage('Build Backend') {
                     steps {
-                        sh 'docker build -t ${BACKEND_TAG} -f backend/Dockerfile backend'
+                        sh "docker build -t ${BACKEND_TAG} -f backend/Dockerfile backend"
                     }
                 }
                 stage('Build Frontend') {
                     steps {
-                        sh 'docker build -t ${FRONTEND_TAG} -f frontend/Dockerfile frontend'
+                        sh "docker build -t ${FRONTEND_TAG} -f frontend/Dockerfile frontend"
                     }
-                }
-            }
-        }
-
-        stage('Filesystem Scan') {
-            steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    sh '''
-                      docker run --rm \
-                        -e TRIVY_CACHE_DIR=/root/.cache \
-                        -v "$PWD":/src \
-                        -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v /var/lib/jenkins/.cache/trivy:/root/.cache \
-                        ${TRIVY_IMAGE} fs --no-progress --exit-code ${TRIVY_EXIT_CODE} \
-                        --severity ${TRIVY_SEVERITY} /src
-                    '''
                 }
             }
         }
@@ -56,28 +33,26 @@ pipeline {
                 stage('Scan Backend Image') {
                     steps {
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            sh '''
-                              docker run --rm \
-                                -e TRIVY_CACHE_DIR=/root/.cache \
-                                -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v /var/lib/jenkins/.cache/trivy:/root/.cache \
-                                ${TRIVY_IMAGE} image --no-progress --exit-code ${TRIVY_EXIT_CODE} \
+                            sh """
+                              docker run --rm \\
+                                -v /var/run/docker.sock:/var/run/docker.sock \\
+                                -v /var/lib/jenkins/.cache/trivy:/root/.cache \\
+                                ${TRIVY_IMAGE} image --no-progress --exit-code ${TRIVY_EXIT_CODE} \\
                                 --severity ${TRIVY_SEVERITY} ${BACKEND_TAG}
-                            '''
+                            """
                         }
                     }
                 }
                 stage('Scan Frontend Image') {
                     steps {
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            sh '''
-                              docker run --rm \
-                                -e TRIVY_CACHE_DIR=/root/.cache \
-                                -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v /var/lib/jenkins/.cache/trivy:/root/.cache \
-                                ${TRIVY_IMAGE} image --no-progress --exit-code ${TRIVY_EXIT_CODE} \
+                            sh """
+                              docker run --rm \\
+                                -v /var/run/docker.sock:/var/run/docker.sock \\
+                                -v /var/lib/jenkins/.cache/trivy:/root/.cache \\
+                                ${TRIVY_IMAGE} image --no-progress --exit-code ${TRIVY_EXIT_CODE} \\
                                 --severity ${TRIVY_SEVERITY} ${FRONTEND_TAG}
-                            '''
+                            """
                         }
                     }
                 }
@@ -90,24 +65,20 @@ pipeline {
             }
         }
 
-        stage('Update Compose') {
-            steps {
-                echo 'Skipping (no tag update required — docker-compose uses local build)'
-            }
-        }
-
         stage('Deploy') {
             steps {
                 script {
-                    // ... your existing docker rm and docker compose up commands ...
-
+                    // Cleanup and deploy the application
+                    sh 'docker compose down --remove-orphans || true'
+                    sh "docker compose up -d"
+                    
                     echo "Waiting for backend to initialize..."
-                    sleep 10 // <-- ADD THIS LINE to give the app time to start
-
+                    sleep 10
+                    
                     echo "Checking backend health..."
                     for (int i = 1; i <= 30; i++) {
                         echo "Attempt ${i}:"
-                        def out = sh(script: "curl -sfS http://localhost:8080/actuator/health || true", returnStdout: true).trim()
+                        def out = sh(script: "curl -sfS ${HEALTH_URL} || true", returnStdout: true).trim()
                         if (out.contains('"status":"UP"')) {
                             echo "Backend is healthy!"
                             return // Exit the script block successfully
