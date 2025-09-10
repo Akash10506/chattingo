@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mysql:
     image: mysql:8.0
@@ -17,9 +15,9 @@ services:
       - ./mysql-init:/docker-entrypoint-initdb.d
     networks:
       - chattingo-network
-    # --- THIS IS THE CORRECTED HEALTHCHECK ---
+    # ADDED HEALTHCHECK TO RESOLVE RACE CONDITION
     healthcheck:
-      test: ["CMD", "mysql", "-h", "localhost", "-u", "chatuser", "--password=chatpassword", "-e", "show databases;"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "chatuser", "--password=chatpassword"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -30,6 +28,7 @@ services:
       dockerfile: Dockerfile
     container_name: chattingo-backend
     restart: unless-stopped
+    # WAITS FOR MYSQL TO BE HEALTHY BEFORE STARTING
     depends_on:
       mysql:
         condition: service_healthy
@@ -70,4 +69,3 @@ volumes:
 networks:
   chattingo-network:
     driver: bridge
-
